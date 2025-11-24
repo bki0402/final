@@ -1,0 +1,77 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    container_name: triple_db
+    environment:
+      POSTGRES_USER: triple_user
+      POSTGRES_PASSWORD: triple_password
+      POSTGRES_DB: triple_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - triple_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U triple_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend API Server
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: triple_backend
+    environment:
+      NODE_ENV: development
+      PORT: 3001
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: triple_user
+      DB_PASSWORD: triple_password
+      DB_NAME: triple_db
+      JWT_SECRET: your-secret-key-change-in-production
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - triple_network
+    command: npm run dev
+
+  # Frontend Web Application
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: triple_frontend
+    environment:
+      REACT_APP_API_URL: http://localhost:3001
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    networks:
+      - triple_network
+    command: npm start
+
+volumes:
+  postgres_data:
+
+networks:
+  triple_network:
+    driver: bridge
+
